@@ -1,26 +1,23 @@
 use axum::{
     error_handling::HandleErrorLayer,
-    http::{StatusCode, Method, self, HeaderMap, Request, HeaderName},
+    http::{self, HeaderMap, HeaderName, Method, Request, StatusCode},
+    middleware::{self, Next},
+    response::Response,
     routing::post,
-    Json, Router, middleware::{self, Next}, response::Response,
+    Json, Router,
 };
-use serde::Deserialize;
-use std::{
-    net::SocketAddr,
-    time::Duration, path::Path,
-};
-use tower::{BoxError, ServiceBuilder};
-use tower_http::{trace::TraceLayer, cors::Any};
-use tower_http::cors::CorsLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use ini::Ini;
-use std::env;
 use lazy_static::lazy_static;
-
+use serde::Deserialize;
+use std::env;
+use std::{net::SocketAddr, path::Path, time::Duration};
+use tower::{BoxError, ServiceBuilder};
+use tower_http::cors::CorsLayer;
+use tower_http::{cors::Any, trace::TraceLayer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 lazy_static! {
-    pub static ref PORT: String =
-        env::var("PORT").unwrap_or("3000".to_owned());
+    pub static ref PORT: String = env::var("PORT").unwrap_or("3000".to_owned());
     pub static ref SECRET_KEY: String =
         env::var("SECRET_KEY").expect("SECRET_KEY environment variable not set");
     pub static ref FILE_PATH: String =
@@ -36,7 +33,8 @@ async fn auth_middleware<B>(
     request: Request<B>,
     next: Next<B>,
 ) -> Result<Response, StatusCode> {
-    if headers.get("X-Secret-Key").is_some() && headers.get("X-Secret-Key").unwrap() == &*SECRET_KEY {
+    if headers.get("X-Secret-Key").is_some() && headers.get("X-Secret-Key").unwrap() == &*SECRET_KEY
+    {
         let response = next.run(request).await;
         Ok(response)
     } else {
@@ -44,29 +42,32 @@ async fn auth_middleware<B>(
     }
 }
 
-
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct VersionRequest {
     version: Option<String>,
     url: Option<String>,
 }
 
 async fn update_version(req: Json<VersionRequest>) -> Result<StatusCode, String> {
-    let config_file = Path::new(&*FILE_PATH);
+    if req.version.is_some() || req.url.is_some() {
+        let config_file = Path::new(&*FILE_PATH);
 
-    let mut config = Ini::load_from_file(&config_file)
-        .map_err(|e| format!("Failed to load config file: {}", e))?;
+        let mut config = Ini::load_from_file(&config_file)
+            .map_err(|e| format!("Failed to load config file: {}", e))?;
 
-    let version_section = config.section_mut(Some("Version")).ok_or("Version section not found")?;
-    if req.version.is_some() {
-        version_section.insert("T3000Version".to_string(), req.version.clone().unwrap());
+        let version_section = config
+            .section_mut(Some("Version"))
+            .ok_or("Version section not found")?;
+        if req.version.is_some() {
+            version_section.insert("T3000Version".to_string(), req.version.clone().unwrap());
+        }
+
+        if req.url.is_some() {
+            version_section.insert("T3000_INSTALL_URL".to_string(), req.url.clone().unwrap());
+        }
+
+        config.write_to_file(&config_file).unwrap();
     }
-    
-    if req.url.is_some() {
-    version_section.insert("T3000_INSTALL_URL".to_string(), req.url.clone().unwrap());
-    }
-
-   config.write_to_file(&config_file).unwrap();
 
     Ok(StatusCode::OK)
 }
@@ -94,9 +95,11 @@ async fn main() {
             // or see this issue https://github.com/tokio-rs/axum/issues/849
             CorsLayer::new()
                 .allow_origin(Any)
-                .allow_headers([http::header::CONTENT_TYPE, HeaderName::from_static("x-secret-key")])
+                .allow_headers([
+                    http::header::CONTENT_TYPE,
+                    HeaderName::from_static("x-secret-key"),
+                ])
                 .allow_methods([Method::POST]),
-                
         )
         // Add middleware to all routes
         .layer(
