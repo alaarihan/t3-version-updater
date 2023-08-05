@@ -14,6 +14,7 @@ After=network.target
 [Service]
 User=root
 WorkingDirectory=/var/www/t3-version-updater
+Environment=PORT=3024
 Environment=SECRET_KEY="your_secret_key"
 Environment=FILE_PATH="/var/www/html/ftp/firmware/ProductPath.ini"
 ExecStart=/var/www/t3-version-updater/target/release/t3-update-version
@@ -25,7 +26,7 @@ WantedBy=multi-user.target
 
 ### Run on Windows powershell
 
-`$Env:SECRET_KEY="your_secret_key";$Env:FILE_PATH="ProductPath.ini"; cargo run`
+`$Env:SECRET_KEY="your_secret_key";$Env:FILE_PATH="ProductPath.ini";$Env:PORT=3000; cargo run`
 
 
 ### Example request

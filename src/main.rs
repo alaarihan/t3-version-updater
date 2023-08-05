@@ -19,6 +19,8 @@ use lazy_static::lazy_static;
 
 
 lazy_static! {
+    pub static ref PORT: String =
+        env::var("PORT").unwrap_or("3000".to_owned());
     pub static ref SECRET_KEY: String =
         env::var("SECRET_KEY").expect("SECRET_KEY environment variable not set");
     pub static ref FILE_PATH: String =
@@ -114,7 +116,7 @@ async fn main() {
                 .into_inner(),
         );
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from(([127, 0, 0, 1], PORT.parse::<u16>().unwrap_or(3000)));
     tracing::debug!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
